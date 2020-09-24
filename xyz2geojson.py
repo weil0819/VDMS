@@ -31,6 +31,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
+
 def argsParser():
 	"""
 	:return:
@@ -51,7 +52,8 @@ def xyz2point(inp, out, trans):
 	to geojson "Point"
 	"""
 	jsonf = open(out, mode='w', encoding='utf-8')
-	with open(inp, mode='r', encoding='utf-8') as f:		
+	with open(inp, mode='r', encoding='utf-8') as f:
+		pool = mp.Pool(mp.cpu_count())	# Init multiprocessing.Pool()
 		while(True):
 			line = f.readline().strip()
 			if not line:
@@ -105,8 +107,7 @@ if __name__=='__main__':
 	print('********** Initializing ArgumentParser and related arguments **********')
 	args = argsParser()
 	if not os.path.exists(args.input):
-		print('Input file doesnot exist!!')
-		return
+		sys.exit('Input file doesnot exist!!')
 
 	print('********** Initializing Transformer **********')
 	input_crs = CRS.from_epsg(28356)
@@ -115,7 +116,7 @@ if __name__=='__main__':
 
 	message = 'Opening "{}" and writing XYZ to Geojson'.format(args.input)	# output message
 	with stopwatch(message):
-		if args.type == 'point':
+		if map(str, args.type) == 'point':
 			xyz2point(args.input, args.output, transformer)
-		elif args.type == 'multipoint':
+		elif map(str, args.type) == 'multipoint':
 			xyz2multipoint(args.input, args.output, transfermer, args.block)

@@ -1,3 +1,13 @@
 # Voxel Data Management System (VDMS)
 
-refer to: report
+## File-based
+.feather
+
+## RDBMS
+PostgreSQL
+
+## NoSQL
+MongoDB
+
+
+Report coming soom ... 
