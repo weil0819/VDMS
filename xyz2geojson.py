@@ -53,9 +53,9 @@ def xyz2point(inp, out, trans):
 	"""
 	jsonf = open(out, mode='w', encoding='utf-8')
 	with open(inp, mode='r', encoding='utf-8') as f:
-		pool = mp.Pool(mp.cpu_count())	# Init multiprocessing.Pool()
 		while(True):
 			line = f.readline().strip()
+			print(line)
 			if not line:
 				break
 			lat, lon, height = map(float, line.split()[:3])
@@ -115,8 +115,8 @@ if __name__=='__main__':
 	transformer = Transformer.from_crs(input_crs, output_crs)
 
 	message = 'Opening "{}" and writing XYZ to Geojson'.format(args.input)	# output message
-	with stopwatch(message):
-		if map(str, args.type) == 'point':
+	with stopwatch(message):		
+		if args.type == 'point':
 			xyz2point(args.input, args.output, transformer)
-		elif map(str, args.type) == 'multipoint':
+		elif args.type == 'multipoint':
 			xyz2multipoint(args.input, args.output, transfermer, args.block)

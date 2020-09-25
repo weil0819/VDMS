@@ -34,7 +34,7 @@ parser.add_argument('-i', '--input', required=True, help='directory for input da
 parser.add_argument('-r', '--splitDir', default='./split_dir/', help='directory for splitted data')
 parser.add_argument('-t', '--type', default='point', help='GeoJSON object type')
 parser.add_argument('-b', '--block', default=3000, help='size of block for multipoint')
-parser.add_argument('-c', '--collection', default='small_flat', help='collection in MongoDB')
+parser.add_argument('-c', '--collection', default='small_point', help='collection in MongoDB')
 args = parser.parse_args(sys.argv[1:])
 
 # Check input arguments validation
@@ -44,8 +44,16 @@ if not os.path.exists(args.splitDir):
 
 INSERT_ROW = 1000
 FILE_SIZE = 1000000
+TYPE = args.type
 COLLECTION = args.collection
-# BLOCK = map(int, args.block)
+BLOCK = map(int, args.block)
+
+collist = DB_CONN.list_collection_names()
+if COLLECTION not in collist:
+	if TYPE == 'point':
+		COLLECTION = DB_CONN['small_point']
+	elif TYPE == 'multipoint':
+		COLLECTION = DB_CONN['small_multipoint']
 
 input_crs = CRS.from_epsg(28356)
 output_crs = CRS.from_epsg(4326)
@@ -59,7 +67,7 @@ class XYZTOMongoDB:
 	def gen_line(self):
 		with open(self.file_path, mode='r', encoding='utf-8') as f:
 			while(True):
-				line = f.readline().strip()
+				line = f.readline()
 				if not line:
 					break
 				yield line
@@ -86,16 +94,38 @@ class XYZTOMongoDB:
 	@staticmethod
 	def gen_point_dict(sp_filepath):
 		with open(sp_filepath, mode='r', encoding='utf-8') as f:
+			if TYPE == 'multipoint':
+				coord = list()
+				heights = list()
+				cnt = 0			
 			while(True):
-				line = f.readline().strip()
+				line = f.readline()
 				if not line:
 					break
 				lat, lon, height = map(float, line.split()[:3])
-				d = OrderedDict()
-				d['geometry'] = Point(transformer.transform(lat*0.2+336000, lon*0.2+6245250))
-				d['height'] = height*0.2+20
+				if TYPE == 'multipoint':
+					coord.append(tuple(transformer.transform(lat*0.2+336000, lon*0.2+6245250)))
+					heights.append(height*0.2+20)
+					cnt += 1				
+					if cnt == BLOCK:
+						d = OrderedDict()  # remember the inserting order
+						d['geometry'] = MultiPoint(coord)
+						d['height'] = heights
+						cnt = 0
+						coord.clear()
+						heights.clear()
+						yield d						
+				elif TYPE == 'point':
+					d = OrderedDict()
+					d['geometry'] = Point(transformer.transform(lat*0.2+336000, lon*0.2+6245250))
+					d['height'] = height*0.2+20
+					yield d
+			if TYPE == 'multipoint':
+				d = OrderedDict()  # remember the inserting order
+				d['geometry'] = MultiPoint(coord)
+				d['height'] = heights
 				yield d
-
+			
 	@property	
 	def sp_file_list(self):
 		"""
@@ -105,7 +135,6 @@ class XYZTOMongoDB:
 		sp_filepath_list = list(map(lambda x: abspath+x, os.listdir(self.split_dir)))
 		return sp_filepath_list
 
-
 	@staticmethod
 	def insert_mongodb(sp_filepath):
 		"""
@@ -114,17 +143,21 @@ class XYZTOMongoDB:
 		sp_gen = XYZTOMongoDB.gen_point_dict(sp_filepath)
 		coll = DB_CONN[COLLECTION]
 		while(True):
-			docs = []
-			try:
-				for i in range(INSERT_ROW):
-					doc = next(sp_gen)
-					docs.append(doc)
-			except StopIteration:
-				break
-			finally:
-				coll.insert_many(docs)
+			if TYPE == 'point':
+				docs = []
+				try:
+					for i in range(INSERT_ROW):
+						doc = next(sp_gen)
+						docs.append(doc)
+				except StopIteration:
+					break
+				finally:
+					coll.insert_many(docs)
+					# x = coll.insert_many(docs)
+					# print(x.inserted_ids)
+			elif TYPE == 'multipoint':
+				coll.insert_one(sp_gen)
 		print('Inserting into MongoDB.')
-
 
 	def clean_split_files(self):
 		"""
@@ -150,5 +183,5 @@ def run(file_path, split_dir):
 	handler.clean_split_files()
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
 	run(args.input, args.splitDir)
